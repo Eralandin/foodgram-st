@@ -4,14 +4,18 @@ from .serializers import (RecipeSerializer, IngredientSerializer,
                           UserSerializer, UserRegisterSerializer,
                           PasswordSetSerializer, FollowSerializer,
                           RecipeCreateSerializer, CuttedRecipesSerializer,
-                          AvatarSerializer)
-from recipes.models import Recipe, Ingredient, Favorite
+                          AvatarSerializer, ShoppingCartSerializer,
+                          UsedIngredients)
+from recipes.models import Recipe, Ingredient, Favorite, ShoppingCart
 from users.models import User, Follow
+from users.permissions import IsAuthorOrReadOnly
 from rest_framework.permissions import (IsAuthenticated, AllowAny,
                                         IsAuthenticatedOrReadOnly)
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Count
+from django.db.models import Count, Sum
+from django.http import FileResponse
+import tempfile
 
 
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
@@ -22,6 +26,7 @@ class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
 
 class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all()
+    permission_classes = [IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly]
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
@@ -42,6 +47,93 @@ class RecipeViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+    @action(
+        detail=True,
+        methods=("post", "delete"),
+        permission_classes=(IsAuthenticated,),
+        url_path="shopping_cart",
+        url_name="shopping_cart",
+    )
+    def shopping_cart(self, request, pk):
+        if request.method == "POST":
+            return self.recordUserToRecipe(
+                request, pk, ShoppingCartSerializer
+            )
+        return self.deleteUserToRecipe(
+            request, pk, "shopping_carts", ShoppingCart.DoesNotExist,
+            "Рецепт отсутствует в списке покупок.",
+        )
+
+    def recordUserToRecipe(self, request, pk, serializerClass):
+        serializer = serializerClass(
+            data={
+                "user": request.user.id,
+                "recipe": pk,
+            }
+        )
+
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def deleteUserToRecipe(self, request, pk, related_name_for_user,
+                           notFoundException,
+                           notFoundMessage,):
+        try:
+            getattr(request.user, related_name_for_user).get(
+                user=request.user, recipe_id=pk
+            ).delete()
+        except notFoundException:
+            return Response(
+                notFoundMessage,
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(
+        detail=False,
+        methods=['get'],
+        permission_classes=[IsAuthenticated],
+        url_path='download_shopping_cart',
+        url_name='download_shopping_cart'
+    )
+    def download_shopping_cart(self, request):
+        ingredients = (
+            UsedIngredients.objects.filter(
+                recipe__shopping_recipe__user=request.user
+            ).values("ingredient__name", "ingredient__measurement_unit")
+            .annotate(totalSum=Sum("amount"))
+        )
+
+        if not ingredients:
+            return Response(
+                {"detail": "Ваша корзина пуста."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        txtContent = self.convertToTXT(ingredients)
+
+        return self.responseFromFile(txtContent, filename='shoppingCart.txt')
+
+    def convertToTXT(self, ingredients):
+        lines = []
+        for item in ingredients:
+            line = f"{item['name']} — {item['total_amount']} ({item['unit']})"
+            lines.append(line)
+        return "\n".join(lines)
+
+    def responseFromFile(self, text, filename):
+        tmp = tempfile.NamedTemporaryFile('w+', delete=False, suffix='.txt')
+        tmp.write(text)
+        tmp.flush()
+        tmp.seek(0)
+        return FileResponse(
+            tmp,
+            as_attachment=True,
+            filename=filename,
+            content_type='text/plain'
+        )
 
     @action(
         detail=True,

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from recipes.models import (Recipe, Ingredient,
-                            UsedIngredients, Favorite)
+                            UsedIngredients, Favorite,
+                            ShoppingCart)
 from users.models import User, Follow
 from drf_extra_fields.fields import Base64ImageField
 
@@ -42,6 +43,12 @@ class RecipeSerializer(serializers.ModelSerializer):
 
     def get_is_favorited(self, obj):
         return obj.id in self.context.get('is_favorited_ids', set())
+
+    def get_is_in_shopping_cart(self, obj):
+        user = self.context['request'].user
+        if not user.is_authenticated:
+            return False
+        return ShoppingCart.objects.filter(user=user, recipe=obj).exists()
 
     class Meta:
         fields = (
@@ -228,3 +235,37 @@ class AvatarSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('avatar',)
+
+
+class UserToRecipeSerializer(serializers.Serializer):
+
+    class Meta:
+        fields = ('user', 'recipe')
+
+    def validate(self, data, related_name):
+        user = data.get("user")
+        recipe = data.get("recipe")
+
+        if getattr(user, related_name).filter(recipe__id=recipe.id).exists():
+            raise serializers.ValidationError(
+                "Список покупок уже содержит данный рецепт!} "
+            )
+
+        return data
+
+    def to_representation(self, instance):
+        serializer = CuttedRecipesSerializer(
+            instance.recipe,
+            context=self.context
+        )
+        return serializer.data
+
+
+class ShoppingCartSerializer(UserToRecipeSerializer,
+                             serializers.ModelSerializer):
+
+    class Meta(UserToRecipeSerializer.Meta):
+        model = ShoppingCart
+
+    def validate(self, data):
+        return super().validate(data, "shoppingCart")

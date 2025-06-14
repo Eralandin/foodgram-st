@@ -20,12 +20,13 @@ class Recipe(models.Model):
     name = models.CharField(max_length=256, verbose_name='Название')
     text = models.TextField(verbose_name='Описание')
     image = models.ImageField(verbose_name='Картинка',
-                              upload_to='recipes/', null=True, blank=True)
+                              upload_to='recipes/')
     cooking_time = models.IntegerField(validators=[MinValueValidator(1)],
                                        verbose_name='Время готовки')
     ingredients = models.ManyToManyField(Ingredient,
                                          through='UsedIngredients',
                                          verbose_name='Список ингредиентов')
+    REQUIRED_FIELDS = ['name', 'text', 'image', 'cooking_time', 'ingredients']
 
     class Meta:
         verbose_name = 'Рецепт'
@@ -75,12 +76,18 @@ class UserToRecipe(models.Model):
     )
 
     class Meta:
+        abstract = True
         unique_together = ('user', 'recipe')
 
 
-class ShopingCart(UserToRecipe):
+class ShoppingCart(UserToRecipe):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='shoppingCart'
+    )
+    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE)
 
-    class Meta(UserToRecipe.Meta):
+    class Meta():
         verbose_name = 'Список покупок'
         verbose_name_plural = 'Списки покупок'
-        related_name = 'shoppingCart'
