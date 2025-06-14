@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import RegexValidator
+from django.core.exceptions import ValidationError
 
 
 class User(AbstractUser):
@@ -25,3 +26,33 @@ class User(AbstractUser):
     class Meta:
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
+
+
+class Follow(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="following",
+        verbose_name="Пользователь"
+    )
+    follower = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="follower",
+        verbose_name="Подписчик"
+    )
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        if self.user == self.follower:
+            raise ValidationError(
+                "Подписка на себя недопустима."
+            )
+
+    class Meta:
+        verbose_name = "Подписка"
+        verbose_name_plural = "Подписки"
+        ordering = ['user__username',]
+        unique_together = (
+            'user',
+            'follower',
+        )

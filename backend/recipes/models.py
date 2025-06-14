@@ -15,9 +15,10 @@ class Ingredient(models.Model):
 
 class Recipe(models.Model):
     author = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name='recipes')
+        User, on_delete=models.CASCADE, related_name='recipes',
+        related_query_name='recipe')
     name = models.CharField(max_length=256, verbose_name='Название')
-    description = models.TextField(verbose_name='Описание')
+    text = models.TextField(verbose_name='Описание')
     image = models.ImageField(verbose_name='Картинка',
                               upload_to='recipes/', null=True, blank=True)
     cooking_time = models.IntegerField(validators=[MinValueValidator(1)],
@@ -32,7 +33,29 @@ class Recipe(models.Model):
 
 
 class UsedIngredients(models.Model):
-    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE)
-    ingredient = models.ForeignKey(Ingredient, on_delete=models.CASCADE)
+    recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE,
+                               related_name='recipeName')
+    ingredient = models.ForeignKey(Ingredient, on_delete=models.CASCADE,
+                                   related_name='ingredientsList')
     amount = models.IntegerField(validators=[MinValueValidator(1)],
                                  verbose_name='Используемое количество')
+
+    class Meta:
+        verbose_name = 'Ингредиент, используемый в рецепте'
+        verbose_name_plural = 'Ингредиенты, используемые в рецепте'
+        unique_together = ('recipe', 'ingredient')
+
+
+class Favorite(models.Model):
+    recipe = models.ForeignKey(
+        Recipe, on_delete=models.CASCADE, related_name='favorite',
+        verbose_name='Избранный рецепт'
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='favorites',
+        verbose_name='Пользователь'
+    )
+
+    class Meta:
+        verbose_name = 'Избранное'
+        verbose_name_plural = 'Избранное'
