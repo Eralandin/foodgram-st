@@ -37,8 +37,9 @@ class UsedIngredients(models.Model):
                                related_name='recipeName')
     ingredient = models.ForeignKey(Ingredient, on_delete=models.CASCADE,
                                    related_name='ingredientsList')
-    amount = models.IntegerField(validators=[MinValueValidator(1)],
-                                 verbose_name='Используемое количество')
+    amount = models.PositiveIntegerField(validators=[MinValueValidator(1)],
+                                         verbose_name=(
+                                             ('Используемое количество')))
 
     class Meta:
         verbose_name = 'Ингредиент, используемый в рецепте'
@@ -59,3 +60,27 @@ class Favorite(models.Model):
     class Meta:
         verbose_name = 'Избранное'
         verbose_name_plural = 'Избранное'
+
+
+class UserToRecipe(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        verbose_name='Пользователь',
+    )
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE,
+        verbose_name='Рецепт',
+    )
+
+    class Meta:
+        unique_together = ('user', 'recipe')
+
+
+class ShopingCart(UserToRecipe):
+
+    class Meta(UserToRecipe.Meta):
+        verbose_name = 'Список покупок'
+        verbose_name_plural = 'Списки покупок'
+        related_name = 'shoppingCart'

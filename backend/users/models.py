@@ -12,9 +12,9 @@ class User(AbstractUser):
                                 validators=[RegexValidator(
                                     regex="^[\w.@+-]+\Z"
                                 )])
-    first_name = models.CharField(max_length=150, blank=True,
+    first_name = models.CharField(max_length=150,
                                   verbose_name='Имя')
-    last_name = models.CharField(max_length=150, blank=True,
+    last_name = models.CharField(max_length=150,
                                  verbose_name='Фамилия')
     avatar = models.ImageField(
         upload_to='users/', null=True, blank=True,

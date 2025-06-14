@@ -2,6 +2,7 @@ from rest_framework import serializers
 from recipes.models import (Recipe, Ingredient,
                             UsedIngredients, Favorite)
 from users.models import User, Follow
+from drf_extra_fields.fields import Base64ImageField
 
 
 class IngredientSerializer(serializers.ModelSerializer):
@@ -9,32 +10,6 @@ class IngredientSerializer(serializers.ModelSerializer):
     class Meta:
         fields = '__all__'
         model = Ingredient
-
-
-class RecipeSerializer(serializers.ModelSerializer):
-    author = serializers.SerializerMethodField(
-        read_only=True,
-    )
-    favorited = serializers.SerializerMethodField()
-
-    def get_author(self, obj):
-        return UserSerializer(obj.author, context=self.context).data
-
-    def get_favorited(self, obj):
-        return obj.id in self.context.get('favorited_ids', set())
-
-    class Meta:
-        fields = (
-            'id',
-            'author',
-            'name',
-            'image',
-            'text',
-            'cooking_time',
-            'ingredients',
-            'favorited',
-        )
-        model = Recipe
 
 
 class UsedIngredientsSerializer(serializers.ModelSerializer):
@@ -53,6 +28,36 @@ class UsedIngredientsSerializer(serializers.ModelSerializer):
         )
 
 
+class RecipeSerializer(serializers.ModelSerializer):
+    author = serializers.SerializerMethodField(
+        read_only=True,
+    )
+    is_favorited = serializers.SerializerMethodField()
+    ingredients = UsedIngredientsSerializer(source='recipeName',
+                                            many=True, read_only=True)
+    is_in_shopping_cart = serializers.SerializerMethodField()
+
+    def get_author(self, obj):
+        return UserSerializer(obj.author, context=self.context).data
+
+    def get_is_favorited(self, obj):
+        return obj.id in self.context.get('is_favorited_ids', set())
+
+    class Meta:
+        fields = (
+            'id',
+            'author',
+            'name',
+            'image',
+            'text',
+            'cooking_time',
+            'ingredients',
+            'is_favorited',
+            'is_in_shopping_cart',
+        )
+        model = Recipe
+
+
 class UsedIngredientsCreateSerializer(serializers.ModelSerializer):
     id = serializers.PrimaryKeyRelatedField(
         queryset=Ingredient.objects.all(),
@@ -68,6 +73,7 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
     ingredients = UsedIngredientsCreateSerializer(
         many=True
     )
+    image = Base64ImageField()
 
     class Meta:
         model = Recipe
@@ -100,14 +106,12 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
         return recipe
 
     def update(self, instance, validated_data):
-        ingredients_data = validated_data.get('ingredients')
-
+        ingredients_data = validated_data.pop('ingredients', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
         if ingredients_data is not None:
-            for attr, value in validated_data.items():
-                setattr(instance, attr, value)
-            instance.save()
-
-            instance.ingredient_amounts.all().delete()
+            instance.recipeName.all().delete()
             self.create_ingredients(instance, ingredients_data)
             return instance
         else:
@@ -131,12 +135,6 @@ class UserSerializer(serializers.ModelSerializer):
     is_subscribed = serializers.SerializerMethodField()
     avatar = serializers.ImageField(read_only=True)
 
-    def get_is_subscribed(self, obj):
-        request = self.context.get('request')
-        if not request or not request.user.is_authenticated:
-            return False
-        return Follow.objects.filter(user=request.user, following=obj).exists()
-
     class Meta:
         model = User
         fields = (
@@ -148,6 +146,12 @@ class UserSerializer(serializers.ModelSerializer):
             'is_subscribed',
             'avatar',
         )
+
+    def get_is_subscribed(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return Follow.objects.filter(user=request.user, follower=obj).exists()
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
@@ -216,3 +220,11 @@ class FavoriteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Favorite
         fields = '__all__'
+
+
+class AvatarSerializer(serializers.ModelSerializer):
+    avatar = Base64ImageField()
+
+    class Meta:
+        model = User
+        fields = ('avatar',)

@@ -1,20 +1,23 @@
+
 from rest_framework import viewsets, status
 from .serializers import (RecipeSerializer, IngredientSerializer,
                           UserSerializer, UserRegisterSerializer,
                           PasswordSetSerializer, FollowSerializer,
-                          RecipeCreateSerializer, CuttedRecipesSerializer)
+                          RecipeCreateSerializer, CuttedRecipesSerializer,
+                          AvatarSerializer)
 from recipes.models import Recipe, Ingredient, Favorite
 from users.models import User, Follow
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import (IsAuthenticated, AllowAny,
+                                        IsAuthenticatedOrReadOnly)
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Count
-from django.urls import reverse
 
 
-class IngredientViewSet(viewsets.ModelViewSet):
+class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Ingredient.objects.all()
     serializer_class = IngredientSerializer
+    pagination_class = None
 
 
 class RecipeViewSet(viewsets.ModelViewSet):
@@ -29,53 +32,16 @@ class RecipeViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         user = self.request.user
         if user.is_authenticated:
-            context['favorited_ids'] = set(
+            context['is_favorited_ids'] = set(
                 Favorite.objects.filter(user=user)
                 .values_list('recipe_id', flat=True)
             )
         else:
-            context['favorited_ids'] = set()
+            context['is_favorited_ids'] = set()
         return context
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
-
-    @action(
-        detail=True,
-        methods=['get'],
-        url_path='get-link',
-    )
-    def get_link(self, request, pk=None):
-        recipe = self.get_object()
-        short_id = format(recipe.id, 'x')
-        short_path = reverse('api:short-link', kwargs={'short_id': short_id})
-        full_url = request.build_absolute_uri(short_path)
-
-        return Response({'short-link': full_url}, status=status.HTTP_200_OK)
-
-    def _handle_add_relation(self, request, model):
-        recipe = self.get_object()
-        user = request.user
-
-        if model.objects.filter(user=user, recipe=recipe).exists():
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-        model.objects.create(user=user, recipe=recipe)
-
-        return Response(
-            CuttedRecipesSerializer(recipe).data,
-            status=status.HTTP_201_CREATED,
-        )
-
-    def _handle_remove_relation(self, request, model):
-        recipe = self.get_object()
-        user = request.user
-        relation = model.objects.filter(user=user, recipe=recipe)
-
-        if not relation.exists():
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-        relation.delete()
-
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=True,
@@ -88,6 +54,40 @@ class RecipeViewSet(viewsets.ModelViewSet):
     @favorite.mapping.delete
     def remove_favorite(self, request, pk=None):
         return self._handle_remove_relation(request, Favorite)
+
+    @action(
+        detail=True,
+        methods=("get",),
+        permission_classes=(IsAuthenticatedOrReadOnly,),
+        url_path="get-link",
+        url_name="get-link",
+    )
+    def get_link(self, request, pk):
+        instance = self.get_object()
+
+        url = f"{request.get_host()}/s/{instance.id}"
+
+        return Response(data={"short-link": url})
+
+    def _handle_add_relation(self, request, model):
+        recipe = self.get_object()
+        user = request.user
+        if model.objects.filter(user=user, recipe=recipe).exists():
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        model.objects.create(user=user, recipe=recipe)
+        return Response(
+            CuttedRecipesSerializer(recipe).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def _handle_remove_relation(self, request, model):
+        recipe = self.get_object()
+        user = request.user
+        relation = model.objects.filter(user=user, recipe=recipe)
+        if not relation.exists():
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+        relation.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -104,6 +104,35 @@ class UserViewSet(viewsets.ModelViewSet):
             'request': request,
             'recipes_limit': request.query_params.get('recipes_limit')
         }
+
+    @action(
+        detail=False,
+        methods=['put', 'delete'],
+        permission_classes=[IsAuthenticated],
+        url_path='me/avatar',
+    )
+    def avatar(self, request):
+        return self.update_avatar(request) if request.method == "PUT" \
+            else self.delete_avatar(request)
+
+    def update_avatar(self, request):
+        user = request.user
+        serializer = AvatarSerializer(user, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            avatar_url = request.build_absolute_uri(user.avatar.url)
+            return Response({"avatar": avatar_url},
+                            status=status.HTTP_200_OK)
+        return Response(serializer.errors,
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    def delete_avatar(self, request):
+        user = request.user
+        if user.avatar:
+            user.avatar.delete(save=False)
+            user.avatar = None
+            user.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=False,
