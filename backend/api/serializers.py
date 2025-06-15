@@ -253,7 +253,7 @@ class UserToRecipeSerializer(serializers.Serializer):
 
         if getattr(user, related_name).filter(recipe__id=recipe.id).exists():
             raise serializers.ValidationError(
-                "Список покупок уже содержит данный рецепт!} "
+                "Список покупок уже содержит данный рецепт!"
             )
 
         return data

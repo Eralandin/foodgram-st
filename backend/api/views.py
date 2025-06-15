@@ -1,4 +1,3 @@
-
 from rest_framework import viewsets, status
 from .serializers import (RecipeSerializer, IngredientSerializer,
                           UserSerializer, UserRegisterSerializer,
@@ -18,17 +17,23 @@ from django.http import FileResponse
 from rest_framework.exceptions import NotFound
 from django.shortcuts import get_object_or_404
 import tempfile
+from django_filters.rest_framework import DjangoFilterBackend
+from .recipeFilter import RecipeFilter, IngredientFilter
 
 
 class IngredientViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Ingredient.objects.all()
     serializer_class = IngredientSerializer
     pagination_class = None
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = IngredientFilter
 
 
 class RecipeViewSet(viewsets.ModelViewSet):
     queryset = Recipe.objects.all()
     permission_classes = [IsAuthenticatedOrReadOnly, IsAuthorOrReadOnly]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RecipeFilter
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
