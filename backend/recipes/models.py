@@ -26,7 +26,6 @@ class Recipe(models.Model):
     ingredients = models.ManyToManyField(Ingredient,
                                          through='UsedIngredients',
                                          verbose_name='Список ингредиентов')
-    REQUIRED_FIELDS = ['name', 'text', 'image', 'cooking_time', 'ingredients']
 
     class Meta:
         verbose_name = 'Рецепт'

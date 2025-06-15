@@ -10,7 +10,7 @@ class User(AbstractUser):
     username = models.CharField(max_length=150, unique=True,
                                 verbose_name='Имя пользователя',
                                 validators=[RegexValidator(
-                                    regex="^[\w.@+-]+\Z"
+                                    regex=r"^[\w.@+-]+\Z"
                                 )])
     first_name = models.CharField(max_length=150,
                                   verbose_name='Имя')

@@ -15,6 +15,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Count, Sum
 from django.http import FileResponse
+from rest_framework.exceptions import NotFound
+from django.shortcuts import get_object_or_404
 import tempfile
 
 
@@ -61,18 +63,19 @@ class RecipeViewSet(viewsets.ModelViewSet):
                 request, pk, ShoppingCartSerializer
             )
         return self.deleteUserToRecipe(
-            request, pk, "shopping_carts", ShoppingCart.DoesNotExist,
+            request, pk, "shoppingCart", ShoppingCart.DoesNotExist,
             "Рецепт отсутствует в списке покупок.",
         )
 
     def recordUserToRecipe(self, request, pk, serializerClass):
+        if not Recipe.objects.filter(pk=pk).exists():
+            raise NotFound(detail="Рецепт не найден")
         serializer = serializerClass(
             data={
                 "user": request.user.id,
                 "recipe": pk,
             }
         )
-
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -80,6 +83,7 @@ class RecipeViewSet(viewsets.ModelViewSet):
     def deleteUserToRecipe(self, request, pk, related_name_for_user,
                            notFoundException,
                            notFoundMessage,):
+        get_object_or_404(Recipe, pk=pk)
         try:
             getattr(request.user, related_name_for_user).get(
                 user=request.user, recipe_id=pk
@@ -100,10 +104,13 @@ class RecipeViewSet(viewsets.ModelViewSet):
         url_name='download_shopping_cart'
     )
     def download_shopping_cart(self, request):
+        recipe_ids = ShoppingCart.objects.filter(
+            user=request.user
+        ).values_list('recipe_id', flat=True)
+
         ingredients = (
-            UsedIngredients.objects.filter(
-                recipe__shopping_recipe__user=request.user
-            ).values("ingredient__name", "ingredient__measurement_unit")
+            UsedIngredients.objects.filter(recipe_id__in=recipe_ids)
+            .values("ingredient__name", "ingredient__measurement_unit")
             .annotate(totalSum=Sum("amount"))
         )
 
@@ -113,27 +120,29 @@ class RecipeViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         txtContent = self.convertToTXT(ingredients)
-
         return self.responseFromFile(txtContent, filename='shoppingCart.txt')
 
     def convertToTXT(self, ingredients):
         lines = []
         for item in ingredients:
-            line = f"{item['name']} — {item['total_amount']} ({item['unit']})"
+            name = item['ingredient__name']
+            unit = item['ingredient__measurement_unit']
+            amount = item['totalSum']
+            line = f"{name} — {amount} ({unit})"
             lines.append(line)
         return "\n".join(lines)
 
     def responseFromFile(self, text, filename):
-        tmp = tempfile.NamedTemporaryFile('w+', delete=False, suffix='.txt')
-        tmp.write(text)
+        tmp = tempfile.NamedTemporaryFile(mode='w+b',
+                                          delete=False, suffix='.txt')
+        tmp.write(text.encode('utf-8'))
         tmp.flush()
         tmp.seek(0)
         return FileResponse(
             tmp,
             as_attachment=True,
             filename=filename,
-            content_type='text/plain'
-        )
+            content_type='text/plain')
 
     @action(
         detail=True,

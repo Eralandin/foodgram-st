@@ -80,7 +80,7 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
     ingredients = UsedIngredientsCreateSerializer(
         many=True
     )
-    image = Base64ImageField()
+    image = Base64ImageField(required=True)
 
     class Meta:
         model = Recipe
@@ -88,6 +88,11 @@ class RecipeCreateSerializer(serializers.ModelSerializer):
             'name', 'image', 'text',
             'cooking_time', 'ingredients',
         )
+
+    def validate_image(self, image):
+        if not image:
+            raise serializers.ValidationError("Картинка обязательна.")
+        return image
 
     def validate_ingredients(self, ingredients):
         if not ingredients:
