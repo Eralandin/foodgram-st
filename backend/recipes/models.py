@@ -12,11 +12,14 @@ class Ingredient(models.Model):
         verbose_name = 'Ингредиент'
         verbose_name_plural = 'Ингредиент'
 
+    def __str__(self):
+        return self.name
+
 
 class Recipe(models.Model):
     author = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='recipes',
-        related_query_name='recipe')
+        related_query_name='recipe', verbose_name='Автор рецепта')
     name = models.CharField(max_length=256, verbose_name='Название')
     text = models.TextField(verbose_name='Описание')
     image = models.ImageField(verbose_name='Картинка',
@@ -31,12 +34,17 @@ class Recipe(models.Model):
         verbose_name = 'Рецепт'
         verbose_name_plural = 'Рецепты'
 
+    def __str__(self):
+        return self.name
+
 
 class UsedIngredients(models.Model):
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE,
-                               related_name='recipeName')
+                               related_name='recipeName',
+                               verbose_name='Рецепт')
     ingredient = models.ForeignKey(Ingredient, on_delete=models.CASCADE,
-                                   related_name='ingredientsList')
+                                   related_name='ingredientsList',
+                                   verbose_name='Игредиент')
     amount = models.PositiveIntegerField(validators=[MinValueValidator(1)],
                                          verbose_name=(
                                              ('Используемое количество')))
@@ -83,10 +91,11 @@ class ShoppingCart(UserToRecipe):
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
-        related_name='shoppingCart'
+        related_name='shoppingCart', verbose_name='Пользователь'
     )
     recipe = models.ForeignKey(Recipe, on_delete=models.CASCADE,
-                               related_name='shoppingcart')
+                               related_name='shoppingcart',
+                               verbose_name='Рецепт')
 
     class Meta():
         verbose_name = 'Список покупок'
