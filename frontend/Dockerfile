@@ -1,5 +1,8 @@
 FROM node:20 as build
 
-WORKDIR /frontend
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm install
+
 COPY . .
-RUN npm install && npm run build
+RUN npm run build

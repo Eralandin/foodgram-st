@@ -1,13 +1,16 @@
-FROM python:3.10-slim
+FROM python:3.10
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+WORKDIR /app
 
-WORKDIR /backend
+RUN pip install gunicorn==20.1.0
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+
+RUN pip install -r requirements.txt --no-cache-dir
+
+RUN mkdir -p /app/collected_static && \
+    mkdir -p /app/media
 
 COPY . .
 
-CMD ["gunicorn", "foodgram_backend.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && gunicorn --bind 0.0.0.0:8000 foodgram_backend.wsgi"]
